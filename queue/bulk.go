@@ -31,37 +31,73 @@ func NewBulkQueue(
 	}
 }
 
+// Get results one-by-one.
 func (c *BulkQueue) Run() <-chan interface{} {
 	var (
-		tick = time.NewTicker(c.period)
 		sink = make(chan interface{}, c.buffer)
 		ws   = hashset.New()
 	)
 
-	go func() {
-		for {
-			select {
-			case <-c.stop:
-				close(sink)
-				tick.Stop()
-				return
-
-			case <-tick.C:
-				for {
-					v, ok := ws.Pop()
-					if !ok {
-						break
-					}
-					sink <- v
+	go c.run(
+		ws,
+		func() {
+			for {
+				v, ok := ws.Pop()
+				if !ok {
+					break
 				}
-
-			case v := <-c.input:
-				ws.Add(v)
+				sink <- v
 			}
-		}
-	}()
+		},
+		func() { close(sink) },
+	)
 
 	return sink
+}
+
+// Get packs of results.
+func (c *BulkQueue) RunBulk() <-chan []interface{} {
+	var (
+		sink = make(chan []interface{}, c.buffer)
+		ws   = hashset.New()
+	)
+
+	go c.run(
+		ws,
+		func() {
+			var bulk = make([]interface{}, 0, ws.Len())
+			for {
+				v, ok := ws.Pop()
+				if !ok {
+					break
+				}
+				bulk = append(bulk, v)
+			}
+			sink <- bulk
+		},
+		func() { close(sink) },
+	)
+
+	return sink
+}
+
+func (c *BulkQueue) run(ws hashset.HashSet, onTick, onStop func()) {
+	var tick = time.NewTicker(c.period)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-c.stop:
+			onStop()
+			return
+
+		case <-tick.C:
+			onTick()
+
+		case v := <-c.input:
+			ws.Add(v)
+		}
+	}
 }
 
 func (c *BulkQueue) Stop() {
