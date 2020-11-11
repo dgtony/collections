@@ -16,25 +16,25 @@ type BulkQueue struct {
 	stop    chan struct{}
 	stopper sync.Once
 	period  time.Duration
-	buffer  int
+	sinkBuf int
 }
 
 func NewBulkQueue(
 	period time.Duration,
-	buffer int,
+	inBufSize, outBufSize int,
 ) *BulkQueue {
 	return &BulkQueue{
-		period: period,
-		buffer: buffer,
-		input:  make(chan interface{}, 1),
-		stop:   make(chan struct{}),
+		period:  period,
+		sinkBuf: outBufSize,
+		input:   make(chan interface{}, inBufSize),
+		stop:    make(chan struct{}),
 	}
 }
 
 // Get results one-by-one.
 func (c *BulkQueue) Run() <-chan interface{} {
 	var (
-		sink = make(chan interface{}, c.buffer)
+		sink = make(chan interface{}, c.sinkBuf)
 		ws   = hashset.New()
 	)
 
@@ -58,22 +58,24 @@ func (c *BulkQueue) Run() <-chan interface{} {
 // Get packs of results.
 func (c *BulkQueue) RunBulk() <-chan []interface{} {
 	var (
-		sink = make(chan []interface{}, c.buffer)
+		sink = make(chan []interface{}, c.sinkBuf)
 		ws   = hashset.New()
 	)
 
 	go c.run(
 		ws,
 		func() {
-			var bulk = make([]interface{}, 0, ws.Len())
-			for {
-				v, ok := ws.Pop()
-				if !ok {
-					break
+			if workingSetSize := ws.Len(); workingSetSize > 0 {
+				var bulk = make([]interface{}, 0, workingSetSize)
+				for {
+					v, ok := ws.Pop()
+					if !ok {
+						break
+					}
+					bulk = append(bulk, v)
 				}
-				bulk = append(bulk, v)
+				sink <- bulk
 			}
-			sink <- bulk
 		},
 		func() { close(sink) },
 	)
@@ -106,4 +108,16 @@ func (c *BulkQueue) Stop() {
 
 func (c *BulkQueue) Push(value interface{}) {
 	c.input <- value
+}
+
+func (c *BulkQueue) PushTimeout(value interface{}, timeout time.Duration) bool {
+	var t = time.NewTimer(timeout)
+	defer t.Stop()
+
+	select {
+	case c.input <- value:
+		return true
+	case <-t.C:
+		return false
+	}
 }
