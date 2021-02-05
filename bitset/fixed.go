@@ -1,11 +1,11 @@
 package bitset
 
-// Non-resizable bitset.
 type FixedBitSet struct {
 	data    []byte
 	maxBits int
 }
 
+// Non-resizable bitset with basic operations.
 func NewFixed(maxBits int) *FixedBitSet {
 	var bytes = maxBits / 8
 	if maxBits > bytes*8 {
