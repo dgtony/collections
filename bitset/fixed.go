@@ -14,39 +14,52 @@ func NewFixed(maxBits int) *FixedBitSet {
 	return &FixedBitSet{data: make([]byte, bytes), maxBits: maxBits}
 }
 
+// Write one at the given bit position.
 func (bs *FixedBitSet) Set(bit int) {
 	bpos, shift := bs.position(bit)
 	bs.data[bpos] |= 1 << shift
 }
 
+// Write zero at the given bit position.
 func (bs *FixedBitSet) Clear(bit int) {
 	bpos, shift := bs.position(bit)
 	bs.data[bpos] &^= 1 << shift
 }
 
+// Determine if given bit position was set.
 func (bs *FixedBitSet) Get(bit int) bool {
 	bpos, shift := bs.position(bit)
 	return bs.data[bpos]&(1<<shift) > 0
 }
 
+// Return positions of all previously set bits.
 func (bs *FixedBitSet) Ones() []int {
 	return bs.indexes(true)
 }
 
+// Return positions of all zero-bits in the bitset.
 func (bs *FixedBitSet) Zeros() []int {
 	return bs.indexes(false)
 }
 
+// Return total number of ones in the bitset.
 func (bs *FixedBitSet) CountOnes() int {
 	return bs.count(true)
 }
 
+// Return total number of zeros in the bitset.
 func (bs *FixedBitSet) CountZeros() int {
 	return bs.count(false)
 }
 
+// Clear entire bitset.
 func (bs *FixedBitSet) Reset() {
 	bs.data = make([]byte, len(bs.data))
+}
+
+// Return size of underlying bytearray.
+func (bs *FixedBitSet) Size() int {
+	return len(bs.data)
 }
 
 func (bs *FixedBitSet) position(bit int) (bytePos int, shift int) {
